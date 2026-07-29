@@ -103,6 +103,7 @@ func (cs Contents) Text() string {
 	return sb.String()
 }
 
+// Usage sums the UsageDetails of every UsageContent in the slice, returning the aggregate token usage (a zero UsageDetails if none is present).
 func (cs Contents) Usage() UsageDetails {
 	var usage UsageDetails
 	for _, c := range cs {
@@ -610,6 +611,7 @@ type UsageDetails struct {
 	ReasoningTokenCount   int64
 }
 
+// Add accumulates other into u, summing each token count field and merging AdditionalCounts (allocating the map on first use).
 func (u *UsageDetails) Add(other UsageDetails) {
 	u.InputTokenCount += other.InputTokenCount
 	u.OutputTokenCount += other.OutputTokenCount
