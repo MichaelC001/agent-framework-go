@@ -756,7 +756,7 @@ func (t *ToolApprovalRequestContent) AlwaysApproveToolResponse() *AlwaysApproveT
 	return &AlwaysApproveToolApprovalResponseContent{
 		InnerResponse:     t.CreateResponse(true, ""),
 		AlwaysApproveTool: true,
-		ContentHeader:     ContentHeader{AdditionalProperties: t.AdditionalProperties},
+		ContentHeader:     ContentHeader{AdditionalProperties: maps.Clone(t.AdditionalProperties)},
 	}
 }
 
@@ -767,7 +767,7 @@ func (t *ToolApprovalRequestContent) AlwaysApproveToolWithArgumentsResponse() *A
 	return &AlwaysApproveToolApprovalResponseContent{
 		InnerResponse:                  t.CreateResponse(true, ""),
 		AlwaysApproveToolWithArguments: true,
-		ContentHeader:                  ContentHeader{AdditionalProperties: t.AdditionalProperties},
+		ContentHeader:                  ContentHeader{AdditionalProperties: maps.Clone(t.AdditionalProperties)},
 	}
 }
 
