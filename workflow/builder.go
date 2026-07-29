@@ -627,6 +627,7 @@ func (s *SwitchBuilder) WithDefault(targets ...ExecutorBinding) *SwitchBuilder {
 
 func (s *SwitchBuilder) collectTargets(targets []ExecutorBinding) []int {
 	out := make([]int, 0, len(targets))
+	seen := make(map[int]struct{}, len(targets))
 	for _, t := range targets {
 		idx, ok := s.targetIndexByID[t.ID]
 		if !ok {
@@ -634,6 +635,13 @@ func (s *SwitchBuilder) collectTargets(targets []ExecutorBinding) []int {
 			s.targets = append(s.targets, t)
 			s.targetIndexByID[t.ID] = idx
 		}
+		if _, dup := seen[idx]; dup {
+			// Skip repeated targets within a single case/default so a message
+			// is delivered at most once per target, matching .NET's
+			// HashSet<int> semantics.
+			continue
+		}
+		seen[idx] = struct{}{}
 		out = append(out, idx)
 	}
 	return out
