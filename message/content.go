@@ -869,6 +869,7 @@ func (t AlwaysApproveToolApprovalResponseContent) kind() contentKind {
 	return "alwaysApproveToolApprovalResponse"
 }
 
+// CodeInterpreterToolCallContent represents a call to a hosted code-interpreter tool, correlated by CallID, whose Inputs hold the submitted code or content.
 type CodeInterpreterToolCallContent struct {
 	ContentHeader
 
@@ -890,6 +891,7 @@ func (t *CodeInterpreterToolCallContent) MarshalJSON() ([]byte, error) {
 
 func (t CodeInterpreterToolCallContent) kind() contentKind { return "codeInterpreterToolCall" }
 
+// CodeInterpreterToolResultContent represents the result of a hosted code-interpreter tool call, correlated by CallID, whose Outputs hold the produced content.
 type CodeInterpreterToolResultContent struct {
 	ContentHeader
 
