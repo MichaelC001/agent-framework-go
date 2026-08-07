@@ -98,7 +98,7 @@ func (strategy *SummarizationStrategy) Compact(ctx context.Context, index *Messa
 		if len(excludedGroups) >= maxSummarizable {
 			break
 		}
-		if group.IsExcluded || group.Kind == GroupKindSystem {
+		if !group.isIncludedNonSystem() {
 			continue
 		}
 		if insertIndex < 0 {

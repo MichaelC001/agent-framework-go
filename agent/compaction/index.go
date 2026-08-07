@@ -291,7 +291,7 @@ func (index *MessageIndex) IncludedTurnCount() int {
 func (index *MessageIndex) IncludedNonSystemGroupCount() int {
 	var total int
 	for _, group := range index.Groups {
-		if isIncludedNonSystemGroup(group) {
+		if group.isIncludedNonSystem() {
 			total++
 		}
 	}
@@ -301,15 +301,11 @@ func (index *MessageIndex) IncludedNonSystemGroupCount() int {
 func (index *MessageIndex) includedNonSystemGroupIndices() []int {
 	var indices []int
 	for i, group := range index.Groups {
-		if isIncludedNonSystemGroup(group) {
+		if group.isIncludedNonSystem() {
 			indices = append(indices, i)
 		}
 	}
 	return indices
-}
-
-func isIncludedNonSystemGroup(group *MessageGroup) bool {
-	return !group.IsExcluded && group.Kind != GroupKindSystem
 }
 
 // RawMessageCount returns the number of original messages represented by the index.
