@@ -100,8 +100,10 @@ func (a *client) run(ctx context.Context, messages []*message.Message, options .
 			}
 		}
 		var responseContents []message.Content
+		var finishReason string
 		if len(resp.Candidates) > 0 {
 			cand := resp.Candidates[0]
+			finishReason = toFinishReason(cand.FinishReason)
 			if cand.Content != nil {
 				for _, part := range cand.Content.Parts {
 					responseContents, err = buildResponsePart(part, responseContents)
@@ -125,6 +127,7 @@ func (a *client) run(ctx context.Context, messages []*message.Message, options .
 			yield(&agent.ResponseUpdate{
 				Contents:          responseContents,
 				Role:              message.RoleAssistant,
+				FinishReason:      finishReason,
 				CreatedAt:         time.Now(),
 				RawRepresentation: resp,
 			}, nil)
@@ -140,8 +143,10 @@ func (a *client) run(ctx context.Context, messages []*message.Message, options .
 				return
 			}
 			var streamContents []message.Content
+			var finishReason string
 			if len(resp.Candidates) > 0 {
 				cand := resp.Candidates[0]
+				finishReason = toFinishReason(cand.FinishReason)
 				if cand.Content != nil {
 					for _, part := range cand.Content.Parts {
 						streamContents, err = buildResponsePart(part, streamContents)
@@ -166,6 +171,7 @@ func (a *client) run(ctx context.Context, messages []*message.Message, options .
 			if !yield(&agent.ResponseUpdate{
 				Contents:          streamContents,
 				Role:              message.RoleAssistant,
+				FinishReason:      finishReason,
 				CreatedAt:         time.Now(),
 				RawRepresentation: resp,
 			}, nil) {
@@ -625,6 +631,29 @@ func toFunctionResponseMap(c *message.FunctionResultContent) (map[string]any, er
 			return map[string]any{"output": string(data)}, nil
 		}
 		return m, nil
+	}
+}
+
+// toFinishReason maps a genai finish reason to the framework's canonical
+// finish reason strings, mirroring the values produced by the OpenAI and
+// Copilot providers ("stop", "length", "tool_calls", "content_filter") so that
+// aggregation over ResponseUpdate.FinishReason stays consistent across
+// providers and with the .NET/Python SDKs. It returns "" for reasons that have
+// no framework equivalent.
+func toFinishReason(reason genai.FinishReason) string {
+	switch reason {
+	case genai.FinishReasonStop:
+		return "stop"
+	case genai.FinishReasonMaxTokens:
+		return "length"
+	case genai.FinishReasonSafety, genai.FinishReasonRecitation,
+		genai.FinishReasonBlocklist, genai.FinishReasonProhibitedContent,
+		genai.FinishReasonSPII:
+		return "content_filter"
+	case genai.FinishReasonMalformedFunctionCall:
+		return "tool_calls"
+	default:
+		return ""
 	}
 }
 
