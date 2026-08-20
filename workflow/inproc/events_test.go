@@ -447,6 +447,44 @@ func TestStreamingRun_AcceptsSequentialMessages(t *testing.T) {
 	}
 }
 
+// Concurrent callers may enqueue input on the same StreamingRun. Run with -race.
+func TestStreamingRun_ConcurrentSendMessage_NoDataRace(t *testing.T) {
+	ex := minimalEchoBinding("ex")
+	wf, err := workflow.NewBuilder(ex).WithOutputFrom(ex).Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	ctx := context.Background()
+	stream, err := inproc.Default.RunStreaming(ctx, wf, nil)
+	if err != nil {
+		t.Fatalf("RunStreaming: %v", err)
+	}
+	defer func() { _ = stream.Close(ctx) }()
+
+	const senders = 64
+	start := make(chan struct{})
+	errs := make(chan error, senders)
+	var wg sync.WaitGroup
+	wg.Add(senders)
+	for i := 0; i < senders; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- stream.SendMessage(ctx, "message")
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Errorf("SendMessage: %v", err)
+		}
+	}
+}
+
 func TestStreamingRun_SendMessageReturnsErrInvalidInputType(t *testing.T) {
 	ex := minimalEchoBinding("ex")
 	wf, err := workflow.NewBuilder(ex).WithOutputFrom(ex).Build()
@@ -464,6 +502,38 @@ func TestStreamingRun_SendMessageReturnsErrInvalidInputType(t *testing.T) {
 	err = stream.SendMessage(ctx, 42)
 	if !errors.Is(err, workflow.ErrInvalidInputType) {
 		t.Fatalf("SendMessage error = %v, want ErrInvalidInputType", err)
+	}
+}
+
+// Cancellation must not acknowledge work after the event loop has stopped.
+// This test intentionally documents the current gap and remains red until
+// canceled runs reject new work.
+func TestStreamingRun_SendMessageAfterCancelReturnsError(t *testing.T) {
+	ex := minimalEchoBinding("ex")
+	wf, err := workflow.NewBuilder(ex).WithOutputFrom(ex).Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	ctx := context.Background()
+	stream, err := inproc.Default.RunStreaming(ctx, wf, nil)
+	if err != nil {
+		t.Fatalf("RunStreaming: %v", err)
+	}
+	defer func() { _ = stream.Close(ctx) }()
+
+	if err := stream.CancelRun(); err != nil {
+		t.Fatalf("CancelRun: %v", err)
+	}
+	status, err := stream.GetStatus(ctx)
+	if err != nil {
+		t.Fatalf("GetStatus: %v", err)
+	}
+	if status != inproc.RunStatusEnded {
+		t.Fatalf("status after CancelRun = %v, want Ended", status)
+	}
+	if err := stream.SendMessage(ctx, "message"); err == nil {
+		t.Fatal("SendMessage after CancelRun succeeded even though the run can no longer execute it")
 	}
 }
 
