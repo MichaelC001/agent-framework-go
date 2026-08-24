@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"iter"
 	"maps"
+	"mime"
 	"reflect"
 	"slices"
 	"strings"
@@ -482,6 +483,17 @@ func (a *client) buildMessageParams(messages []*message.Message, opts []agent.Op
 	return params, nil
 }
 
+// isPDFMediaType reports whether mediaType denotes a PDF document. Media types
+// may carry parameters (e.g. "application/pdf; charset=binary") and arbitrary
+// casing, so the base type is parsed and compared case-insensitively.
+func isPDFMediaType(mediaType string) bool {
+	base, _, err := mime.ParseMediaType(mediaType)
+	if err != nil {
+		base = strings.ToLower(strings.TrimSpace(mediaType))
+	}
+	return base == "application/pdf"
+}
+
 // buildWebSearchTool maps a hosted WebSearch tool to the Anthropic
 // web_search_20250305 tool request, populating the optional MaxUses,
 // AllowedDomains, BlockedDomains and UserLocation fields from the tool's
@@ -632,13 +644,32 @@ func buildMessageParam(msg *message.Message) (anthropic.MessageParam, error) {
 			}
 			content = append(content, anthropic.NewToolResultBlock(c.CallID, resStr, c.Error != nil))
 		case *message.DataContent:
-			if c.TopLevelMediaType() == "image" {
+			switch {
+			case c.TopLevelMediaType() == "image":
 				mediaType := c.MediaType
 				if mediaType == "" {
 					mediaType = "image/jpeg"
 				}
 				content = append(content, anthropic.NewImageBlockBase64(mediaType, c.Data))
+			case isPDFMediaType(c.MediaType):
+				content = append(content, anthropic.NewDocumentBlock(anthropic.Base64PDFSourceParam{
+					Data: c.Data,
+				}))
 			}
+		case *message.URIContent:
+			switch {
+			case c.TopLevelMediaType() == "image":
+				content = append(content, anthropic.NewImageBlock(anthropic.URLImageSourceParam{URL: c.URI}))
+			case isPDFMediaType(c.MediaType):
+				content = append(content, anthropic.NewDocumentBlock(anthropic.URLPDFSourceParam{URL: c.URI}))
+			}
+		case *message.HostedFileContent:
+			// The stable Anthropic Messages API used here (anthropic.MessageNewParams)
+			// has no file-id image/document source in anthropic-sdk-go v1.58.1; only
+			// the Beta API exposes BetaFileImageSourceParam/BetaFileDocumentSourceParam.
+			// A hosted file reference therefore cannot be forwarded yet, so surface an
+			// explicit error rather than silently dropping it.
+			return anthropic.MessageParam{}, fmt.Errorf("anthropic: hosted file references (file id %q) are not supported by the Messages API; use DataContent or URIContent instead", c.FileID)
 		}
 	}
 
