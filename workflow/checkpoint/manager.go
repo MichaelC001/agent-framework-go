@@ -132,9 +132,9 @@ func (s *jsonManager) Commit(ctx context.Context, sessionID string, checkpoint *
 	if checkpoint.Parent != nil && checkpoint.Parent.SessionID != sessionID {
 		return workflow.CheckpointInfo{}, fmt.Errorf("checkpoint: parent sessionID %q does not match sessionID %q", checkpoint.Parent.SessionID, sessionID)
 	}
-	v, err := json.Marshal(checkpoint)
+	v, err := marshalCheckpoint(checkpoint)
 	if err != nil {
-		return workflow.CheckpointInfo{}, fmt.Errorf("failed to serialize checkpoint: %w", err)
+		return workflow.CheckpointInfo{}, err
 	}
 
 	info, err := s.store.CreateCheckpoint(ctx, sessionID, v, checkpoint.Parent)
@@ -158,11 +158,7 @@ func (s *jsonManager) Lookup(ctx context.Context, sessionID string, checkpointIn
 	if err != nil {
 		return nil, fmt.Errorf("could not retrieve checkpoint with ID %s for session %s: %w", checkpointInfo.CheckpointID, sessionID, err)
 	}
-	var checkpoint checkpoint.Checkpoint
-	if err := json.Unmarshal(v, &checkpoint); err != nil {
-		return nil, fmt.Errorf("failed to deserialize checkpoint data for checkpoint with ID %s for session %s: %w", checkpointInfo.CheckpointID, sessionID, err)
-	}
-	return &checkpoint, nil
+	return unmarshalCheckpoint(v, checkpointInfo, sessionID)
 }
 
 func (s *jsonManager) RetrieveIndex(ctx context.Context, sessionID string, withParent *workflow.CheckpointInfo) ([]workflow.CheckpointInfo, error) {
@@ -197,4 +193,20 @@ func validateManagerCheckpointInfo(sessionID string, info workflow.CheckpointInf
 		return fmt.Errorf("checkpoint sessionID %q does not match sessionID %q", info.SessionID, sessionID)
 	}
 	return nil
+}
+
+func marshalCheckpoint(cp *checkpoint.Checkpoint) (json.RawMessage, error) {
+	v, err := json.Marshal(cp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize checkpoint: %w", err)
+	}
+	return v, nil
+}
+
+func unmarshalCheckpoint(v json.RawMessage, checkpointInfo workflow.CheckpointInfo, sessionID string) (*checkpoint.Checkpoint, error) {
+	var cp checkpoint.Checkpoint
+	if err := json.Unmarshal(v, &cp); err != nil {
+		return nil, fmt.Errorf("failed to deserialize checkpoint data for checkpoint with ID %s for session %s: %w", checkpointInfo.CheckpointID, sessionID, err)
+	}
+	return &cp, nil
 }
