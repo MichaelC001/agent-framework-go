@@ -242,11 +242,13 @@ func mapStopReason(reason anthropic.StopReason) string {
 }
 
 func toUsageDetails(usage anthropic.Usage) message.UsageDetails {
+	inputTokens := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
 	details := message.UsageDetails{
-		InputTokenCount:       usage.InputTokens,
+		InputTokenCount:       inputTokens,
 		OutputTokenCount:      usage.OutputTokens,
-		TotalTokenCount:       usage.InputTokens + usage.OutputTokens,
+		TotalTokenCount:       inputTokens + usage.OutputTokens,
 		CachedInputTokenCount: usage.CacheReadInputTokens,
+		ReasoningTokenCount:   usage.OutputTokensDetails.ThinkingTokens,
 	}
 	if usage.CacheCreationInputTokens != 0 {
 		if details.AdditionalCounts == nil {
@@ -263,6 +265,7 @@ func toUsageDetailsDelta(usage anthropic.MessageDeltaUsage) message.UsageDetails
 		OutputTokens:             usage.OutputTokens,
 		CacheCreationInputTokens: usage.CacheCreationInputTokens,
 		CacheReadInputTokens:     usage.CacheReadInputTokens,
+		OutputTokensDetails:      usage.OutputTokensDetails,
 	})
 }
 
