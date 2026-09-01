@@ -11,6 +11,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/microsoft/agent-framework-go/agent"
+	"github.com/microsoft/agent-framework-go/agent/harness/toolautocall"
 	"github.com/microsoft/agent-framework-go/provider/openaiprovider"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/azure"
@@ -26,6 +27,10 @@ const (
 type AgentConfig struct {
 	agent.Config
 
+	// ToolAutoCall configures automatic function-tool invocation. When nil, defaults
+	// are used.
+	ToolAutoCall *toolautocall.Config
+
 	// Instructions are provided to Foundry as system instructions for project Responses API agents.
 	// They are ignored for server-side Foundry prompt agents, whose instructions are owned by the service.
 	Instructions string
@@ -34,7 +39,8 @@ type AgentConfig struct {
 	// Use this when local session history providers own conversation state.
 	DisableStoreOutput bool
 
-	// OpenAIOptions are appended to the OpenAI-compatible per-agent client options.
+	// OpenAIOptions configure the OpenAI-compatible per-agent client. Foundry-owned
+	// endpoint, authentication, and protocol options take precedence.
 	OpenAIOptions []option.RequestOption
 }
 
@@ -85,12 +91,16 @@ func NewAgent(endpoint string, credential azcore.TokenCredential, target AgentTa
 		baseURL = serverAgentOpenAIBaseURL(agentEndpoint)
 		config.ID = cmp.Or(config.ID, agentName)
 		config.Name = cmp.Or(config.Name, agentName)
+		targetOptions = append(targetOptions, option.WithQueryDel("api-version"))
+		targetOptions = append(targetOptions, option.WithQuery("api-version", foundryDataPlaneAPIVersion))
 		instructions = ""
 	default:
 		panic(fmt.Sprintf("unsupported Foundry agent target %T", target))
 	}
 
-	openAIOptions := []option.RequestOption{
+	openAIOptions := make([]option.RequestOption, 0, len(config.OpenAIOptions)+len(targetOptions)+6)
+	openAIOptions = append(openAIOptions, config.OpenAIOptions...)
+	openAIOptions = append(openAIOptions,
 		// WithTokenCredential requires the Azure endpoint marker registered by
 		// WithEndpoint. WithEndpoint also adds ?api-version=v1 and rewrites a
 		// Responses path from /responses to /openai/responses.
@@ -108,8 +118,7 @@ func NewAgent(endpoint string, credential azcore.TokenCredential, target AgentTa
 		// Use the Foundry audience while retaining the SDK's token refresh and
 		// authenticated-transport protections.
 		azure.WithTokenCredential(credential, azure.WithTokenCredentialScopes([]string{azureAIResourceScope})),
-	}
-	openAIOptions = append(openAIOptions, config.OpenAIOptions...)
+	)
 	openAIOptions = append(openAIOptions, targetOptions...)
 	openAIOptions = append(openAIOptions, clientHeadersRequestOption())
 	openAIOptions = append(openAIOptions, servedModelRequestOption())
@@ -117,9 +126,11 @@ func NewAgent(endpoint string, credential azcore.TokenCredential, target AgentTa
 
 	return openaiprovider.NewResponsesAgent(openai.NewClient(openAIOptions...), openaiprovider.AgentConfig{
 		Config:             config.Config,
+		ProviderName:       "microsoft.foundry",
 		Instructions:       instructions,
 		Model:              model,
 		DisableStoreOutput: config.DisableStoreOutput,
+		ToolAutoCall:       config.ToolAutoCall,
 	})
 }
 
