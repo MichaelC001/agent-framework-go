@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/google/uuid"
+	"github.com/microsoft/agent-framework-go/internal/toolmiddleware"
 	"github.com/microsoft/agent-framework-go/message"
 	"github.com/microsoft/agent-framework-go/tool"
 )
@@ -94,6 +95,11 @@ type Config struct {
 	// Middlewares wrap the agent lifecycle before history and context providers.
 	Middlewares []Middleware
 
+	// FunctionMiddlewares intercept individual function calls in registration order,
+	// with the first outermost. They apply to tools supplied by context providers
+	// and additional tools configured on automatic tool execution, as well as Tools.
+	FunctionMiddlewares []FunctionInvocationMiddleware
+
 	// MessageInjector configures mid-run message injection. Call its
 	// EnqueueMessages method to queue messages. Nil disables message injection.
 	MessageInjector *MessageInjector
@@ -116,6 +122,12 @@ func New(prov ProviderConfig, cfg Config) *Agent {
 	}
 
 	cfg.RunOptions = slices.Clone(cfg.RunOptions)
+	functionMiddlewares := slices.DeleteFunc(slices.Clone(cfg.FunctionMiddlewares), func(mf FunctionInvocationMiddleware) bool { return mf == nil })
+	if len(functionMiddlewares) > 0 {
+		cfg.RunOptions = append(cfg.RunOptions, toolmiddleware.Wrapper(func(fn tool.FuncTool) tool.FuncTool {
+			return &functionInvocationTool{FuncTool: fn, middlewares: functionMiddlewares}
+		}))
+	}
 	for _, tool := range cfg.Tools {
 		if tool != nil {
 			cfg.RunOptions = append(cfg.RunOptions, WithTool(tool))

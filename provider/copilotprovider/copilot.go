@@ -19,6 +19,7 @@ import (
 
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/microsoft/agent-framework-go/agent"
+	"github.com/microsoft/agent-framework-go/internal/toolmiddleware"
 	"github.com/microsoft/agent-framework-go/message"
 	"github.com/microsoft/agent-framework-go/tool"
 )
@@ -469,6 +470,11 @@ func copilotTools(options []agent.Option) []copilot.Tool {
 		if !ok {
 			continue
 		}
+		for _, opt := range options {
+			if wrap, ok := opt.(toolmiddleware.Wrapper); ok {
+				funcTool = wrap(funcTool)
+			}
+		}
 		converted, err := toCopilotTool(funcTool)
 		if err != nil {
 			converted = copilot.Tool{
@@ -499,6 +505,7 @@ func toCopilotTool(funcTool tool.FuncTool) (copilot.Tool, error) {
 			if ctx == nil {
 				ctx = context.Background()
 			}
+			ctx = toolmiddleware.WithCallID(ctx, invocation.ToolCallID)
 			result, err := funcTool.Call(ctx, arguments)
 			if err != nil {
 				return copilot.ToolResult{}, err
